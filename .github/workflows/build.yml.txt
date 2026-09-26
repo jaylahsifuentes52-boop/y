@@ -1,0 +1,64 @@
+name: Build GorillaPatcher APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Apktool and Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apktool default-jdk
+
+      - name: Prepare GorillaPatcher Structure and Config
+        run: |
+          mkdir -p output_project/assets/bin/Managed
+          
+          if [ ! -f "output_project/apktool.yml" ]; then
+            echo 'version: "2.7.0"' > output_project/apktool.yml
+            echo 'apkFileName: GorillaPatcher.apk' >> output_project/apktool.yml
+            echo 'isFrameworkApk: false' >> output_project/apktool.yml
+            echo 'packageInfo:' >> output_project/apktool.yml
+            echo '  forcedPackageId: "127"' >> output_project/apktool.yml
+            echo '  renameManifestPackage: "com.TvMods.GorillaPatcher"' >> output_project/apktool.yml
+          fi
+
+          if [ ! -f "output_project/AndroidManifest.xml" ]; then
+            echo '<?xml version="1.0" encoding="utf-8" standalone="no"?>' > output_project/AndroidManifest.xml
+            echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.AnotherAxiom.GorillaTag" platformBuildVersionCode="32" platformBuildVersionName="12">' >> output_project/AndroidManifest.xml
+            echo '    <application android:allowBackup="false" android:appComponentFactory="androidx.core.app.CoreComponentFactory" android:debuggable="true" android:label="Gorilla Tag">' >> output_project/AndroidManifest.xml
+            echo '    </application>' >> output_project/AndroidManifest.xml
+            echo '</manifest>' >> output_project/AndroidManifest.xml
+          fi
+
+      - name: Compile GorillaPatcher APK
+        run: |
+          echo "Building APK for com.AnotherAxiom.GorillaTag using GorillaPatcher..."
+          mkdir -p build/outputs
+          apktool b output_project -o build/outputs/GorillaPatcher.apk
+
+      - name: Sign APK with Debug Key
+        run: |
+          # Non-interactive key generation to prevent prompt freezing/failures
+          keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug, O=Android, C=US"
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore debug.keystore -storepass android build/outputs/GorillaPatcher.apk androiddebugkey
+
+      - name: Upload GorillaPatcher Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GorillaPatcher-APK
+          path: build/outputs/GorillaPatcher.apk
